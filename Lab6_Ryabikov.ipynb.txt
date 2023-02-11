@@ -1,0 +1,351 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Лабораторная работа №6. Рябиков Илья"
+      ],
+      "metadata": {
+        "id": "HZ1-6jTOfnxu"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Task \n",
+        "\n",
+        "1. Selecting your bond issuer\n",
+        "\n",
+        "On bonds.finam.ru, find your issuer's bond issues by name. Select one of the issues outstanding with redemption/offer in the next 5 five years. If there are several such issues, select the most liquid issue (in terms of bid-ask spread and trading volume - in the \"Trading Results\" section). If your issuer does not have bonds, choose a bond from another issuer in the same industry.\n",
+        "\n",
+        "Describe the process of choosing a bond issue - why did you choose this particular issue?\n",
+        "\n",
+        "What is the coupon rate for this issue? Is it fixed or variable? What is the maturity date of the bond? How often are coupons credited?\n",
+        "\n",
+        "What is the volume of the bond issue?\n",
+        "\n",
+        "What is the current price of this bond? What is the current yield to maturity?\n",
+        "\n",
+        "\n",
+        "2. Determine the main parameters of the bond\n",
+        "\n",
+        "Determine the main parameters of the bond - coupon yield, maturity (if the bond provides for an offer, then before the offer), frequency of coupon payments.\n",
+        "\n",
+        "+ Calculate YTM.\n",
+        "\n",
+        "+ Calculate Macaulay duration\n",
+        "\n",
+        "+ Calculate accrued interest"
+      ],
+      "metadata": {
+        "id": "ix3WZj5cfuRr"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 1. Разбор облигации"
+      ],
+      "metadata": {
+        "id": "-fveQ4gcgJPe"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Мой эмитент - нефтегазовая компания Лукойл. До просмотра выпусков облигаций я думал, что количество выпусков будет очень большим и мне придется тяжело и долго выбирать между ними, но в обращении сейчас всего 10 выпусков, из которых только 6 имеют дату погашения в границах ближайших 5 лет, как указано в задании. Все выпуски в обращении - еврооблигации, но из-за санкций против российских компаний, в том числе НРД, были созданы [замещающие выпуски](https://lukoil.ru/PressCenter/Pressreleases/Pressrelease?rid=597768), по которым выплаты будут производиться самими еврооблигациями Лукойла. Эти проблемы возникли из-за того, что эмитентами самих облигаций являются дочерние компании Лукойла, зарегистрированные в других странах (видимо это было сделано для более простого привлечения иностранных кредиторов и инвесторов). \n",
+        "\n",
+        "Я выбрал выпуск RU000A1059N9 - это замещающий выпуск для выпуска с погашением в 2026 году (XS1514045886). Был выбран именно этот выпуск, поскольку он наиболее ликвиден - это единственный выпуск, торги которым измеряются миллионами, а спред между bid и ask составляет менее 1%. Изначально хотелось взять выпуск с погашением в 2023 году, поскольку он был выпущен в 2013 - до большинства санкций, и его было бы очень интересно рассмотреть, но на прошлой неделе была всего одна(!!!) продажа облигаций этого выпуска, а также была проблема с его замещением.\n",
+        "\n",
+        "Данная облигация имеет фиксированный купон в 4.75% годовых, который выплачивается 2 раза в год купонами по 23.75 USD. Погашение облигации будет 02.11.2026, следовательно до погашения еще где-то 3.9 лет.\n",
+        "\n",
+        "Объем выпуска номинально составляет 1 млрд USD, но размещено на данный момент 315.76 млн USD.\n",
+        "\n",
+        "Текущая цена составляет 97% от номинала, или 970 USD, а YTM 5.68% согласно сайту [RusBonds](https://rusbonds.ru/bonds/220554/calc). В пункте 2 также расчитаем YTM самостоятельно"
+      ],
+      "metadata": {
+        "id": "TpjWhS7ogVLg"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 2. Показатели облигации"
+      ],
+      "metadata": {
+        "id": "RzVjQcF1scn5"
+      }
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "-heATpdvfBiw"
+      },
+      "outputs": [],
+      "source": [
+        "par = 1000\n",
+        "price = 970\n",
+        "\n",
+        "coupon = 4.75\n",
+        "coupon_sum = 23.75\n",
+        "coupon_freq = 2\n",
+        "\n",
+        "maturity = 3.9\n",
+        "fcp = 15"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Расчет YTM"
+      ],
+      "metadata": {
+        "id": "UTSzke3XveHd"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Рассчитаем Yield to Maturity - доходность к погашению облигации по функции из семинара."
+      ],
+      "metadata": {
+        "id": "R2L49MIa4tip"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import scipy.optimize as optimize\n",
+        "\n",
+        "def bond_ytm(price, par, T, coup, freq=2, guess=0.05):\n",
+        "    freq = float(freq)\n",
+        "    periods = T*2\n",
+        "    coupon = coup/100.*par\n",
+        "    dt = [(i+1)/freq for i in range(int(periods))]\n",
+        "    ytm_func = lambda y: \\\n",
+        "        sum([coupon/freq/(1+y/freq)**(freq*t) for t in dt]) +\\\n",
+        "        par/(1+y/freq)**(freq*T) - price\n",
+        "\n",
+        "    return optimize.newton(ytm_func, guess)"
+      ],
+      "metadata": {
+        "id": "g2DrNFMdsq4x"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "print(f'YTM is {round(bond_ytm(price, par, maturity, coupon)*100, 2)}%')"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "3HUTB17Euv2i",
+        "outputId": "c4358bfb-f465-4106-cdf1-802d2e1b0545"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "YTM is 5.16%\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Доходность к погашению из-за того, что стоимость облигации ниже номинала, получилась выше купонной доходности.\n",
+        "\n",
+        "Значения немного не сошлись с данными на сайте, возможно это связанно с методом оптимизации."
+      ],
+      "metadata": {
+        "id": "DiUFRr9D5y_i"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Дюрация Маколея"
+      ],
+      "metadata": {
+        "id": "fpkjkDZKvZ4H"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Посчитаем "
+      ],
+      "metadata": {
+        "id": "IaB2F2a96J09"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def bond_price(par, T, ytm, coup, freq=2):\n",
+        "        freq    = float(freq)\n",
+        "        periods = T*2\n",
+        "        coupon   = coup/100.*par/freq # size of coupon payment\n",
+        "        dt = [(i+1)/freq for i in range(int(periods))] # vector with future cash flow payment periods \n",
+        "        price = sum([coupon/(1+ytm/freq)**(freq*t) for t in dt]) + par/(1+ytm/freq)**(freq*T)\n",
+        "        return price\n",
+        "\n",
+        "  \n",
+        "def bond_mod_duration(price, par, T, coup, freq, dy=0.01):\n",
+        "        ytm = bond_ytm(price, par, T, coup, freq)\n",
+        "    \n",
+        "        ytm_minus = ytm - dy    \n",
+        "        price_minus = bond_price(par, T, ytm_minus, coup, freq)\n",
+        "        \n",
+        "        ytm_plus = ytm + dy\n",
+        "        price_plus = bond_price(par, T, ytm_plus, coup, freq)\n",
+        "        \n",
+        "        mduration = (price_minus-price_plus)/(2*price*dy)\n",
+        "        return mduration"
+      ],
+      "metadata": {
+        "id": "oE7VGPpkvC4-"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "mod_duration = bond_mod_duration(price, par, maturity, coupon, 2)\n",
+        "print(f'Durations is {round(mod_duration, 1)} years')"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "5CB5mD26viSu",
+        "outputId": "d6d582f5-68b0-445b-f435-7416c48959e8"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Durations is 3.5 years\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Дюрация показывает нам чувствительность цены к изменению процентнной ставки, а также время до полного возврата инвестиций. Она получилась меньше времени до погашения, это снова произошло из-за того, что цена облигации ниже номинала. На сайте значения примерно такие же."
+      ],
+      "metadata": {
+        "id": "Geu9Ipvl6LkU"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Accured interest"
+      ],
+      "metadata": {
+        "id": "etc8AtM0v8lW"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "И последнее - по формуле расчитаем НКД"
+      ],
+      "metadata": {
+        "id": "uGVOSb-9_YpJ"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from datetime import datetime\n",
+        "\n",
+        "coupon_sum = 40\n",
+        "\n",
+        "t_coupon_1 = '2013-04-01'\n",
+        "t_coupon = '2013-09-28'\n",
+        "\n",
+        "t_0 = '2013-05-20'\n",
+        "t0 = datetime.strptime(t_0, \"%Y-%m-%d\")\n",
+        "tc = datetime.strptime(t_coupon, \"%Y-%m-%d\")\n",
+        "tc_1 = datetime.strptime(t_coupon_1, \"%Y-%m-%d\")\n",
+        "\n",
+        "accured_interest = coupon_sum * (t0-tc_1).days / (tc-tc_1).days\n",
+        "print(f'Accured intserest is USD {round(accured_interest, 2)}')"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "k_s37LqOv3Sd",
+        "outputId": "58a45004-a9ac-4390-9d42-f9a6fd618012"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Accured intserest is USD 10.89\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "С прошлого купона прошло не так много времени, а до следующего еще несколько месяцев, поэтому накопленный купонный доход всего 2,36 доллара"
+      ],
+      "metadata": {
+        "id": "zRH9swGj7Ox2"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Вывод"
+      ],
+      "metadata": {
+        "id": "euJetOXt7ap1"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Таким образом, был исследован выпуск облигаций эмитента Лукойл. Из-за того, что произошло замещение, всего лишь один выпуск характеризуется большим объемом торгов, поэтому выбирать было не слишком возможно. Тем не менее, все кроме цены сильно ниже номинала по облигации было нормально, и политическая ситуация не испортила анализа облигации, хотя и повлияла на эмитента.\n",
+        "\n",
+        "Значение доходности к погашению немного разошлось с реальностью - это было из-за методов оптимизации. Дюрация оказалось приблизительно равной посчитаннной на сайте (которую мы считаем реальной). НКД также оказался близок к реальному."
+      ],
+      "metadata": {
+        "id": "b1w8n7QM7eAK"
+      }
+    }
+  ]
+}

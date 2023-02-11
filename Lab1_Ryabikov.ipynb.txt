@@ -1,0 +1,1947 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Лабораторная работа №1.\n",
+        "Рябиков Илья"
+      ],
+      "metadata": {
+        "id": "rXAcAhOF9lAS"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 1. Подгрузка библиотек, объявление функций и загрузка данных"
+      ],
+      "metadata": {
+        "id": "BAXQ-O7c95a_"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Первым делом подгрузим все библиотеки и данные по аналогии с кодом из аудиторной работы"
+      ],
+      "metadata": {
+        "id": "vm2IGiDG-UA3"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import matplotlib.pyplot as plt\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "\n",
+        "from datetime import date\n",
+        "import requests\n"
+      ],
+      "metadata": {
+        "id": "zBSsA08R-jRh"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Скопируем функцию перевода российского названия в английское из семинара"
+      ],
+      "metadata": {
+        "id": "KbbqMPx9-9bo"
+      }
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "oTdIaDv-9HJc",
+        "outputId": "bc03815f-81a5-4e21-a423-d3fed96e9330"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Looking in indexes: https://pypi.org/simple, https://us-python.pkg.dev/colab-wheels/public/simple/\n",
+            "Requirement already satisfied: transliterate in /usr/local/lib/python3.7/dist-packages (1.10.2)\n",
+            "Requirement already satisfied: six>=1.1.0 in /usr/local/lib/python3.7/dist-packages (from transliterate) (1.15.0)\n"
+          ]
+        }
+      ],
+      "source": [
+        "!pip install transliterate\n",
+        "from transliterate import translit\n",
+        "\n",
+        "def to_latin(s):\n",
+        "  \"\"\"Convert letters in *s* from Cyrillic to Latin.\"\"\"\n",
+        "  return translit(s, 'ru', reversed=True)\n",
+        "\n",
+        "# test how it works\n",
+        "assert to_latin(s=\"ГАЗПРОМ\") == \"GAZPROM\""
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Достанем данные из файла из семинара"
+      ],
+      "metadata": {
+        "id": "64ueUxQn_JZO"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import pandas as pd\n",
+        "import os\n",
+        "\n",
+        "local_filename = \"processed_2018.csv\"\n",
+        "url = \"https://boodata.s3.eu-central-1.amazonaws.com/processed_2018.csv\"\n",
+        "\n",
+        "if not os.path.exists(local_filename): # do not execute if file already downloaded\n",
+        "   df = pd.read_csv(url)\n",
+        "   df.to_csv(local_filename, index=False) # file read abck from this file\n",
+        "   if False:                   # swithc off\n",
+        "      df.to_excel(\"copy.xlsx\") # sample saving to Excel\n",
+        "\n",
+        "df = pd.read_csv(local_filename,                    # read remote CSV file\n",
+        "                 dtype={'ok1': int, 'region': int}) # specify type for some columns \n",
+        "df = df.set_index(\"inn\")                            # set index        \n",
+        "df.insert(0, \"title_en\", df.title.map(to_latin))    # insert new column "
+      ],
+      "metadata": {
+        "id": "Ip3t4g0R9Tbq"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "А также описание переменных"
+      ],
+      "metadata": {
+        "id": "aFTG9Z8e_NHd"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import requests\n",
+        "\n",
+        "variables = requests.get(\"https://boodata.s3.eu-central-1.amazonaws.com/variables.json\").json()\n",
+        "\n",
+        "def whatis(varname):\n",
+        "  return variables.get(varname)\n",
+        "\n",
+        "def unlag(df):\n",
+        "  return [col for col in df.columns if not col.endswith(\"lag\")]\n",
+        "\n",
+        "ru_names = pd.DataFrame([(col, whatis(col)) for col in unlag(df)],\n",
+        "           columns=['Название переменной', 'Описание']).set_index('Название переменной')"
+      ],
+      "metadata": {
+        "id": "2c-ta7bv-vdT"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 2. Формирование выборки из полного датасета"
+      ],
+      "metadata": {
+        "id": "WazjgRM3_cYi"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Мой родной регион - Челябинская область. Соответственно для анализа отчетности возьмем в датасет именно 74 регион. \n",
+        "\n",
+        "Как и я, многие молодые люди уезжают из Челябинска, а тем более из менее крупных городов области, поскольку в компаниях области отсутствуют видимые перспективы роста. Тем не менее, фирмы по прежнему работают, следовательно, проанализировав доходность 2018 года, можно будет понять, какое состояние было у компаний, когда я принял решение о переезде из области, была ли угроза их деятельности с точки зрения финансов. "
+      ],
+      "metadata": {
+        "id": "d97qqPUC_g_2"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df = df[df['region']==74]"
+      ],
+      "metadata": {
+        "id": "j_pjPPms_gKr"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Для использования в аналитике оставим сами названия компаний, индустрию по ОКВЭД, а также показатели: выручка (в текущем и прошлом году), долгосрочный и краткосрочный долг, общее количество активов, прибыль от продаж, проценты к уплате - этого всего необходимо и достаточно для оценки финансового состояния компаний"
+      ],
+      "metadata": {
+        "id": "fh6JKGKEqowG"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df = df[['title_en', 'title', 'okved','ok1', 'sales', 'sales_lag', 'debt_long', 'debt_short', 'ta', 'profit_oper', 'exp_interest']]"
+      ],
+      "metadata": {
+        "id": "Q30dppgDFb17"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.to_excel('dataset_ryabikov.xlsx')"
+      ],
+      "metadata": {
+        "id": "0gvYSZdhftU-"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 3. Расчет финансовых показателей"
+      ],
+      "metadata": {
+        "id": "6GFwMkWSnCzI"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Посчитаем 3 параметра, которые используются в одном из банков (инсайт) для определения качества финансового состояния клиентов:\n",
+        "\n",
+        "*будем считать, что profit_oper = EBIT, поскольку EBIT = sales - sales costs - operating costs = sales - costs = EBIT\n",
+        "\n",
+        "ROA = Выручка/Активы - показывает, насколько доходны активы компании\n",
+        "Долг/EBIT - показывает, насколько прибыль компании помогает покрывать долг\n",
+        "ICR = EBIT/Проценты к уплате.\n",
+        "\n",
+        "Также посчитаем показатели роста выручки (выручка в этом году/выручка в прошлом году), маржинальности компании (прибыль/выручка) и закредитованности компании (долг/активы)."
+      ],
+      "metadata": {
+        "id": "vvtVaB3xngDc"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df[\"debt\"] = df.debt_long + df.debt_short #total_debt\n",
+        "df[\"leverage\"] = df.debt / df.ta \n",
+        "df[\"profit\"] = df[\"profit_oper\"] #EBIT\n",
+        "df[\"roa\"] = df.sales / df.ta        # return on assets  \n",
+        "df[\"margin\"] = df.profit / df.sales # profitability\n",
+        "df['debt/profit'] = df['debt']/df['profit'] # income generated to pay debt\n",
+        "df[\"icr\"] = df.profit/df.exp_interest             # interest coverage ratio\n",
+        "df[\"growth\"] = df.sales / df.sales_lag #growth rate of sales"
+      ],
+      "metadata": {
+        "id": "fgQtawQ7HaaY"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Посчитаем средние показатели"
+      ],
+      "metadata": {
+        "id": "IM1V43XPueZG"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "pd.DataFrame(df.mean())"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 606
+        },
+        "id": "QubzkIVAucgp",
+        "outputId": "01baef49-2dc9-451f-adec-c4b057675fc6"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:1: FutureWarning: Dropping of nuisance columns in DataFrame reductions (with 'numeric_only=None') is deprecated; in a future version this will raise TypeError.  Select only valid columns before calling the reduction.\n",
+            "  \"\"\"Entry point for launching an IPython kernel.\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "                      0\n",
+              "ok1           37.870504\n",
+              "sales          7.439496\n",
+              "sales_lag      6.607791\n",
+              "debt_long      1.847291\n",
+              "debt_short     0.597263\n",
+              "ta             7.633158\n",
+              "profit_oper    0.884558\n",
+              "exp_interest   0.150493\n",
+              "debt           2.444554\n",
+              "leverage       0.263750\n",
+              "profit         0.884558\n",
+              "roa            1.062241\n",
+              "margin             -inf\n",
+              "debt/profit         NaN\n",
+              "icr                 NaN\n",
+              "growth              inf"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-fefb9297-0eb5-4cb6-aa44-bca168ee81ac\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>0</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>ok1</th>\n",
+              "      <td>37.870504</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>sales</th>\n",
+              "      <td>7.439496</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>sales_lag</th>\n",
+              "      <td>6.607791</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>debt_long</th>\n",
+              "      <td>1.847291</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>debt_short</th>\n",
+              "      <td>0.597263</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>ta</th>\n",
+              "      <td>7.633158</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>profit_oper</th>\n",
+              "      <td>0.884558</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>exp_interest</th>\n",
+              "      <td>0.150493</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>debt</th>\n",
+              "      <td>2.444554</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>leverage</th>\n",
+              "      <td>0.263750</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>profit</th>\n",
+              "      <td>0.884558</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>roa</th>\n",
+              "      <td>1.062241</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>margin</th>\n",
+              "      <td>-inf</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>debt/profit</th>\n",
+              "      <td>NaN</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>icr</th>\n",
+              "      <td>NaN</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>growth</th>\n",
+              "      <td>inf</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-fefb9297-0eb5-4cb6-aa44-bca168ee81ac')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-fefb9297-0eb5-4cb6-aa44-bca168ee81ac button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-fefb9297-0eb5-4cb6-aa44-bca168ee81ac');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 9
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Заметим, что из-за деления на 0, в некоторых показателях есть NaN и inf. Посмотрим, сколько таких компаний"
+      ],
+      "metadata": {
+        "id": "XhaZqsUEuuta"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df[df.isin([np.nan, np.inf, -np.inf]).any(1)].shape"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "hIRkOnVlChYz",
+        "outputId": "6b83194e-7914-4b00-9d53-67fba91b95a9"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "(102, 19)"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 10
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Таких компаний достаточно много, но если мы удалим эти значения, в датасете останутся только нормальные значения, без нулевых значений прибыли или выручки. Да, с одной стороны неправильно удалять почти половину датасета, но с другой - 176 компаний более чем достаточно для анализа, а эти компании из-за нулевых показателей прибыли/продаж/прошлогодней выручки могут быть просто неактивными и близкими к закрытию или банкротству (да, тогда мы их не включаем в анализе в пункте 5, но в данном случае мера кажется мне оправданной)"
+      ],
+      "metadata": {
+        "id": "peTGyPMIvi6L"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df_copy = df.copy()\n",
+        "df = df[~df.isin([np.nan, np.inf, -np.inf]).any(1)]"
+      ],
+      "metadata": {
+        "id": "UoFgIkPquFvN"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Расчитаем средние значения без выбросов"
+      ],
+      "metadata": {
+        "id": "miKaZ_Ufv_UU"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "aver_values = pd.DataFrame(df.mean(), columns=['aver_value']).reset_index().rename(columns={'index':'parameter'})\n",
+        "aver_values"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 606
+        },
+        "id": "Bf2qE5NFvdoA",
+        "outputId": "b7f2d114-3109-489d-ee2f-3c386c094720"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:1: FutureWarning: Dropping of nuisance columns in DataFrame reductions (with 'numeric_only=None') is deprecated; in a future version this will raise TypeError.  Select only valid columns before calling the reduction.\n",
+            "  \"\"\"Entry point for launching an IPython kernel.\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "       parameter  aver_value\n",
+              "0            ok1   34.568182\n",
+              "1          sales    9.903358\n",
+              "2      sales_lag    8.871284\n",
+              "3      debt_long    2.453778\n",
+              "4     debt_short    0.905705\n",
+              "5             ta    9.942188\n",
+              "6    profit_oper    1.322551\n",
+              "7   exp_interest    0.224932\n",
+              "8           debt    3.359483\n",
+              "9       leverage    0.344601\n",
+              "10        profit    1.322551\n",
+              "11           roa    1.066894\n",
+              "12        margin    0.085409\n",
+              "13   debt/profit   -9.388814\n",
+              "14           icr   54.106707\n",
+              "15        growth    1.315948"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-48e1f397-b6ff-427d-a2a5-60aaade31c20\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>parameter</th>\n",
+              "      <th>aver_value</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>ok1</td>\n",
+              "      <td>34.568182</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>sales</td>\n",
+              "      <td>9.903358</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>sales_lag</td>\n",
+              "      <td>8.871284</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>debt_long</td>\n",
+              "      <td>2.453778</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>debt_short</td>\n",
+              "      <td>0.905705</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>5</th>\n",
+              "      <td>ta</td>\n",
+              "      <td>9.942188</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>6</th>\n",
+              "      <td>profit_oper</td>\n",
+              "      <td>1.322551</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>7</th>\n",
+              "      <td>exp_interest</td>\n",
+              "      <td>0.224932</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>8</th>\n",
+              "      <td>debt</td>\n",
+              "      <td>3.359483</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>9</th>\n",
+              "      <td>leverage</td>\n",
+              "      <td>0.344601</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>10</th>\n",
+              "      <td>profit</td>\n",
+              "      <td>1.322551</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>11</th>\n",
+              "      <td>roa</td>\n",
+              "      <td>1.066894</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>12</th>\n",
+              "      <td>margin</td>\n",
+              "      <td>0.085409</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>13</th>\n",
+              "      <td>debt/profit</td>\n",
+              "      <td>-9.388814</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>14</th>\n",
+              "      <td>icr</td>\n",
+              "      <td>54.106707</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>15</th>\n",
+              "      <td>growth</td>\n",
+              "      <td>1.315948</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-48e1f397-b6ff-427d-a2a5-60aaade31c20')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-48e1f397-b6ff-427d-a2a5-60aaade31c20 button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-48e1f397-b6ff-427d-a2a5-60aaade31c20');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 12
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 4. Возьмем одну компанию из датасета"
+      ],
+      "metadata": {
+        "id": "Te8IACBHwK0Q"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Компания которую будем рассматривать относительно других - МАКФА, которая находится прямо напротив моего дома, и входит в [топ-30 работадателей России](https://chelyabinsk.bezformata.com/listnews/kompaniy-chelyabinskoy-oblasti-voshli/102775643/#:~:text=%D0%92%20%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D1%83%20%D0%BB%D0%B8%D0%B4%D0%B5%D1%80%D0%BE%D0%B2%20%D1%81%D1%80%D0%B5%D0%B4%D0%B8%20%D0%BA%D1%80%D1%83%D0%BF%D0%BD%D0%B5%D0%B9%D1%88%D0%B8%D1%85,%C2%BB%20(105%2D%D0%B5).)\n",
+        "\n",
+        "Поскольку цель данной аналитики - понять, насколько перспективны с финансовой точки зрения работадатели Челябинской области, выбор компании согласуется с целью всего анализа"
+      ],
+      "metadata": {
+        "id": "KofKxB_txeYv"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "one_firm = df.loc[7438015885, :]"
+      ],
+      "metadata": {
+        "id": "qAH9-VOiv79A"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "one_firm_df = pd.DataFrame(one_firm).reset_index().rename(columns={'index': 'parameter',7438015885:'MAKFA'})\n",
+        "one_firm_df"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 645
+        },
+        "id": "rZN3iNV-wXMv",
+        "outputId": "648915b8-f71b-42c8-d958-87b0d03cc239"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "       parameter     MAKFA\n",
+              "0       title_en     MAKFA\n",
+              "1          title     МАКФА\n",
+              "2          okved   10.61.2\n",
+              "3            ok1        10\n",
+              "4          sales    15.232\n",
+              "5      sales_lag    15.391\n",
+              "6      debt_long     0.027\n",
+              "7     debt_short     1.537\n",
+              "8             ta     7.826\n",
+              "9    profit_oper     3.254\n",
+              "10  exp_interest     0.046\n",
+              "11          debt     1.564\n",
+              "12      leverage  0.199847\n",
+              "13        profit     3.254\n",
+              "14           roa  1.946333\n",
+              "15        margin  0.213629\n",
+              "16   debt/profit  0.480639\n",
+              "17           icr  70.73913\n",
+              "18        growth  0.989669"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-523f4279-76bf-41d1-ae5d-182c380a54e9\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>parameter</th>\n",
+              "      <th>MAKFA</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>title_en</td>\n",
+              "      <td>MAKFA</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>title</td>\n",
+              "      <td>МАКФА</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>okved</td>\n",
+              "      <td>10.61.2</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>ok1</td>\n",
+              "      <td>10</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>sales</td>\n",
+              "      <td>15.232</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>5</th>\n",
+              "      <td>sales_lag</td>\n",
+              "      <td>15.391</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>6</th>\n",
+              "      <td>debt_long</td>\n",
+              "      <td>0.027</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>7</th>\n",
+              "      <td>debt_short</td>\n",
+              "      <td>1.537</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>8</th>\n",
+              "      <td>ta</td>\n",
+              "      <td>7.826</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>9</th>\n",
+              "      <td>profit_oper</td>\n",
+              "      <td>3.254</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>10</th>\n",
+              "      <td>exp_interest</td>\n",
+              "      <td>0.046</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>11</th>\n",
+              "      <td>debt</td>\n",
+              "      <td>1.564</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>12</th>\n",
+              "      <td>leverage</td>\n",
+              "      <td>0.199847</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>13</th>\n",
+              "      <td>profit</td>\n",
+              "      <td>3.254</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>14</th>\n",
+              "      <td>roa</td>\n",
+              "      <td>1.946333</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>15</th>\n",
+              "      <td>margin</td>\n",
+              "      <td>0.213629</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>16</th>\n",
+              "      <td>debt/profit</td>\n",
+              "      <td>0.480639</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>17</th>\n",
+              "      <td>icr</td>\n",
+              "      <td>70.73913</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>18</th>\n",
+              "      <td>growth</td>\n",
+              "      <td>0.989669</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-523f4279-76bf-41d1-ae5d-182c380a54e9')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-523f4279-76bf-41d1-ae5d-182c380a54e9 button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-523f4279-76bf-41d1-ae5d-182c380a54e9');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 14
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "compare = pd.merge(one_firm_df, aver_values, how='inner', on='parameter')\n",
+        "compare"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 551
+        },
+        "id": "Eg9pyHPJ1AtM",
+        "outputId": "6f9dc55d-4604-4871-a951-12874bd99637"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "       parameter     MAKFA  aver_value\n",
+              "0            ok1        10   34.568182\n",
+              "1          sales    15.232    9.903358\n",
+              "2      sales_lag    15.391    8.871284\n",
+              "3      debt_long     0.027    2.453778\n",
+              "4     debt_short     1.537    0.905705\n",
+              "5             ta     7.826    9.942188\n",
+              "6    profit_oper     3.254    1.322551\n",
+              "7   exp_interest     0.046    0.224932\n",
+              "8           debt     1.564    3.359483\n",
+              "9       leverage  0.199847    0.344601\n",
+              "10        profit     3.254    1.322551\n",
+              "11           roa  1.946333    1.066894\n",
+              "12        margin  0.213629    0.085409\n",
+              "13   debt/profit  0.480639   -9.388814\n",
+              "14           icr  70.73913   54.106707\n",
+              "15        growth  0.989669    1.315948"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-0491cb0d-7737-4a70-b7e5-47692f83523d\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>parameter</th>\n",
+              "      <th>MAKFA</th>\n",
+              "      <th>aver_value</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>ok1</td>\n",
+              "      <td>10</td>\n",
+              "      <td>34.568182</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>sales</td>\n",
+              "      <td>15.232</td>\n",
+              "      <td>9.903358</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>sales_lag</td>\n",
+              "      <td>15.391</td>\n",
+              "      <td>8.871284</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>debt_long</td>\n",
+              "      <td>0.027</td>\n",
+              "      <td>2.453778</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>debt_short</td>\n",
+              "      <td>1.537</td>\n",
+              "      <td>0.905705</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>5</th>\n",
+              "      <td>ta</td>\n",
+              "      <td>7.826</td>\n",
+              "      <td>9.942188</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>6</th>\n",
+              "      <td>profit_oper</td>\n",
+              "      <td>3.254</td>\n",
+              "      <td>1.322551</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>7</th>\n",
+              "      <td>exp_interest</td>\n",
+              "      <td>0.046</td>\n",
+              "      <td>0.224932</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>8</th>\n",
+              "      <td>debt</td>\n",
+              "      <td>1.564</td>\n",
+              "      <td>3.359483</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>9</th>\n",
+              "      <td>leverage</td>\n",
+              "      <td>0.199847</td>\n",
+              "      <td>0.344601</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>10</th>\n",
+              "      <td>profit</td>\n",
+              "      <td>3.254</td>\n",
+              "      <td>1.322551</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>11</th>\n",
+              "      <td>roa</td>\n",
+              "      <td>1.946333</td>\n",
+              "      <td>1.066894</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>12</th>\n",
+              "      <td>margin</td>\n",
+              "      <td>0.213629</td>\n",
+              "      <td>0.085409</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>13</th>\n",
+              "      <td>debt/profit</td>\n",
+              "      <td>0.480639</td>\n",
+              "      <td>-9.388814</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>14</th>\n",
+              "      <td>icr</td>\n",
+              "      <td>70.73913</td>\n",
+              "      <td>54.106707</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>15</th>\n",
+              "      <td>growth</td>\n",
+              "      <td>0.989669</td>\n",
+              "      <td>1.315948</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-0491cb0d-7737-4a70-b7e5-47692f83523d')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-0491cb0d-7737-4a70-b7e5-47692f83523d button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-0491cb0d-7737-4a70-b7e5-47692f83523d');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 15
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "По всем показателям, кроме роста выручки, компания МАКФА выглядит лучше других компаний области. Но, возможно, из-за снижения выручки, в будущем можно ожидать и снижения остальных показателей, поэтому пока что выбирать в качестве места работы МАКФА я не буду)\n",
+        "\n",
+        "\n",
+        "\n"
+      ],
+      "metadata": {
+        "id": "9rtJeRAJyGbV"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 5. Поиск компаний-банкротов"
+      ],
+      "metadata": {
+        "id": "mxTbSckJ2CYL"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Определим функции поиска по названию из семинара"
+      ],
+      "metadata": {
+        "id": "gblA5Q8n2doR"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def df_contains(df, name):\n",
+        "  return df.title_en.str.lower().str.contains(name.lower())\n",
+        "\n",
+        "def find(df, name, not_names=[]):\n",
+        "  ix = df_contains(df, name)\n",
+        "  for not_name in not_names:    \n",
+        "    ix = ix & ~df_contains(df, not_name)\n",
+        "  return ix\n",
+        "cols = ['title_en', 'region', 'sales',  'ta']"
+      ],
+      "metadata": {
+        "id": "dBGw5vn32X1Q"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Найдем компании по которым открыто конкурсное производство"
+      ],
+      "metadata": {
+        "id": "6RjGz-yB2kYa"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.loc[find(df, \"konkursnoe\"), ['title_en','ta']].sort_values('ta', ascending = False)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 81
+        },
+        "id": "A2megboP2GLJ",
+        "outputId": "0299bf2b-a3f4-4b46-a3e9-d28e32e81abf"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "Empty DataFrame\n",
+              "Columns: [title_en, ta]\n",
+              "Index: []"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-a88201c7-8bd6-4b05-be7b-b9cd8a308e2f\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>title_en</th>\n",
+              "      <th>ta</th>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>inn</th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-a88201c7-8bd6-4b05-be7b-b9cd8a308e2f')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-a88201c7-8bd6-4b05-be7b-b9cd8a308e2f button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-a88201c7-8bd6-4b05-be7b-b9cd8a308e2f');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 17
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "В моей выборке нет компаний-банкротов. Найдем близких к банкротству: компании, у которых высокая долговая нагрузка (выше 1.5), высокий или отрицательный показатель debt/profit (нормальный от 0 до 4 согласно методике банка)"
+      ],
+      "metadata": {
+        "id": "tzpgGy6o3atN"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df[(df['leverage']>1.5) & ((df['debt/profit']>4) | (df['debt/profit']<0))]"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 259
+        },
+        "id": "2dyQSXp53k8V",
+        "outputId": "a4cd2df9-5d99-4d09-f7a1-b83b14572656"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "                                           title_en  \\\n",
+              "inn                                                   \n",
+              "7452027843  ChELJaBINSKIJ TRAKTORNYJ ZAVOD-URALTRAK   \n",
+              "7451264986                               OTEL'STROJ   \n",
+              "\n",
+              "                                            title  okved  ok1  sales  \\\n",
+              "inn                                                                    \n",
+              "7452027843  ЧЕЛЯБИНСКИЙ ТРАКТОРНЫЙ ЗАВОД-УРАЛТРАК  28.92   28  5.293   \n",
+              "7451264986                             ОТЕЛЬСТРОЙ  55.10   55  0.232   \n",
+              "\n",
+              "            sales_lag  debt_long  debt_short     ta  profit_oper  \\\n",
+              "inn                                                                \n",
+              "7452027843      7.090      9.475       3.515  8.041       -1.147   \n",
+              "7451264986      0.197      2.566       0.038  1.573       -0.101   \n",
+              "\n",
+              "            exp_interest    debt  leverage  profit       roa    margin  \\\n",
+              "inn                                                                      \n",
+              "7452027843         1.134  12.990  1.615471  -1.147  0.658251 -0.216701   \n",
+              "7451264986         0.038   2.604  1.655435  -0.101  0.147489 -0.435345   \n",
+              "\n",
+              "            debt/profit       icr    growth  \n",
+              "inn                                          \n",
+              "7452027843   -11.325196 -1.011464  0.746544  \n",
+              "7451264986   -25.782178 -2.657895  1.177665  "
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-ce1be0ed-1c2f-40f9-8f71-4a68a66e52ea\">\n",
+              "    <div class=\"colab-df-container\">\n",
+              "      <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>title_en</th>\n",
+              "      <th>title</th>\n",
+              "      <th>okved</th>\n",
+              "      <th>ok1</th>\n",
+              "      <th>sales</th>\n",
+              "      <th>sales_lag</th>\n",
+              "      <th>debt_long</th>\n",
+              "      <th>debt_short</th>\n",
+              "      <th>ta</th>\n",
+              "      <th>profit_oper</th>\n",
+              "      <th>exp_interest</th>\n",
+              "      <th>debt</th>\n",
+              "      <th>leverage</th>\n",
+              "      <th>profit</th>\n",
+              "      <th>roa</th>\n",
+              "      <th>margin</th>\n",
+              "      <th>debt/profit</th>\n",
+              "      <th>icr</th>\n",
+              "      <th>growth</th>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>inn</th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "      <th></th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>7452027843</th>\n",
+              "      <td>ChELJaBINSKIJ TRAKTORNYJ ZAVOD-URALTRAK</td>\n",
+              "      <td>ЧЕЛЯБИНСКИЙ ТРАКТОРНЫЙ ЗАВОД-УРАЛТРАК</td>\n",
+              "      <td>28.92</td>\n",
+              "      <td>28</td>\n",
+              "      <td>5.293</td>\n",
+              "      <td>7.090</td>\n",
+              "      <td>9.475</td>\n",
+              "      <td>3.515</td>\n",
+              "      <td>8.041</td>\n",
+              "      <td>-1.147</td>\n",
+              "      <td>1.134</td>\n",
+              "      <td>12.990</td>\n",
+              "      <td>1.615471</td>\n",
+              "      <td>-1.147</td>\n",
+              "      <td>0.658251</td>\n",
+              "      <td>-0.216701</td>\n",
+              "      <td>-11.325196</td>\n",
+              "      <td>-1.011464</td>\n",
+              "      <td>0.746544</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>7451264986</th>\n",
+              "      <td>OTEL'STROJ</td>\n",
+              "      <td>ОТЕЛЬСТРОЙ</td>\n",
+              "      <td>55.10</td>\n",
+              "      <td>55</td>\n",
+              "      <td>0.232</td>\n",
+              "      <td>0.197</td>\n",
+              "      <td>2.566</td>\n",
+              "      <td>0.038</td>\n",
+              "      <td>1.573</td>\n",
+              "      <td>-0.101</td>\n",
+              "      <td>0.038</td>\n",
+              "      <td>2.604</td>\n",
+              "      <td>1.655435</td>\n",
+              "      <td>-0.101</td>\n",
+              "      <td>0.147489</td>\n",
+              "      <td>-0.435345</td>\n",
+              "      <td>-25.782178</td>\n",
+              "      <td>-2.657895</td>\n",
+              "      <td>1.177665</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "      <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-ce1be0ed-1c2f-40f9-8f71-4a68a66e52ea')\"\n",
+              "              title=\"Convert this dataframe to an interactive table.\"\n",
+              "              style=\"display:none;\">\n",
+              "        \n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\"viewBox=\"0 0 24 24\"\n",
+              "       width=\"24px\">\n",
+              "    <path d=\"M0 0h24v24H0V0z\" fill=\"none\"/>\n",
+              "    <path d=\"M18.56 5.44l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94zm-11 1L8.5 8.5l.94-2.06 2.06-.94-2.06-.94L8.5 2.5l-.94 2.06-2.06.94zm10 10l.94 2.06.94-2.06 2.06-.94-2.06-.94-.94-2.06-.94 2.06-2.06.94z\"/><path d=\"M17.41 7.96l-1.37-1.37c-.4-.4-.92-.59-1.43-.59-.52 0-1.04.2-1.43.59L10.3 9.45l-7.72 7.72c-.78.78-.78 2.05 0 2.83L4 21.41c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7.78-7.78 2.81-2.81c.8-.78.8-2.07 0-2.86zM5.41 20L4 18.59l7.72-7.72 1.47 1.35L5.41 20z\"/>\n",
+              "  </svg>\n",
+              "      </button>\n",
+              "      \n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      flex-wrap:wrap;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "      <script>\n",
+              "        const buttonEl =\n",
+              "          document.querySelector('#df-ce1be0ed-1c2f-40f9-8f71-4a68a66e52ea button.colab-df-convert');\n",
+              "        buttonEl.style.display =\n",
+              "          google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "        async function convertToInteractive(key) {\n",
+              "          const element = document.querySelector('#df-ce1be0ed-1c2f-40f9-8f71-4a68a66e52ea');\n",
+              "          const dataTable =\n",
+              "            await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                     [key], {});\n",
+              "          if (!dataTable) return;\n",
+              "\n",
+              "          const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "            '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "            + ' to learn more about interactive tables.';\n",
+              "          element.innerHTML = '';\n",
+              "          dataTable['output_type'] = 'display_data';\n",
+              "          await google.colab.output.renderOutput(dataTable, element);\n",
+              "          const docLink = document.createElement('div');\n",
+              "          docLink.innerHTML = docLinkHtml;\n",
+              "          element.appendChild(docLink);\n",
+              "        }\n",
+              "      </script>\n",
+              "    </div>\n",
+              "  </div>\n",
+              "  "
+            ]
+          },
+          "metadata": {},
+          "execution_count": 18
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "2 компании имеют опасное превышение долга над активами, а также нестабильные денежные потоки для покрытия этого долга. Именно они в первую очередь должны считаться высокорискованными и близкими к банкротству"
+      ],
+      "metadata": {
+        "id": "AZvJzqWu58_7"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 6. Построим график зависимости финансовых показателей"
+      ],
+      "metadata": {
+        "id": "RK36jM_v3mYP"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Построим зависимость темпов роста выручки от закредитованности компании. Основная гипотеза - компании, получившие большую долговую нагрузку, расчитывали нарастить, выручку, что должно отразиться на графике"
+      ],
+      "metadata": {
+        "id": "PIcbi8Rh9SdF"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.plot.scatter(x='leverage', y='growth', alpha=0.5)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 296
+        },
+        "id": "PfL2q2AX-Quk",
+        "outputId": "b13b296f-f05e-4120-a5c3-37a5c779433c"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<matplotlib.axes._subplots.AxesSubplot at 0x7f96e697de50>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 19
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<Figure size 432x288 with 1 Axes>"
+            ],
+            "image/png": "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\n"
+          },
+          "metadata": {
+            "needs_background": "light"
+          }
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Гипотеза не сработала - показатель темпа роста выручки не зависит от закредитованности. Визуально график не имеет никакой зависимости и дальше тестировать коэффициенты при уравнении линейной регрессии нет смысла."
+      ],
+      "metadata": {
+        "id": "shcOu0hG-6gx"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Также посмотрим зависимость средней выручки от индустрии (по первому значению в ОКВЭДе). В Челябинской области очень много металлургических предприятий, скорее всего именно ОКВЭД 24 даст самый высокий результат"
+      ],
+      "metadata": {
+        "id": "zHgnT7HXcTpr"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "import seaborn as sns\n",
+        "from matplotlib import rcParams\n",
+        "\n",
+        "rcParams['figure.figsize'] = 12,8\n",
+        "sns.barplot(data=df, x=\"ok1\", y=\"sales\")\n",
+        "\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 514
+        },
+        "id": "38QALuu3YxTx",
+        "outputId": "d0b31112-0bc8-42e3-a04b-1355fda22155"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<matplotlib.axes._subplots.AxesSubplot at 0x7f96d8f53d10>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 20
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<Figure size 864x576 with 1 Axes>"
+            ],
+            "image/png": "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\n"
+          },
+          "metadata": {
+            "needs_background": "light"
+          }
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Да, совершенно верно, ОКВЭД 24 металлургия имеет наивысшую среднюю выручку, но интересно, что также довольно высокие значения на ОКВЭДе 47 - розничная торговля, и 19 - производство кокса и нефтепродуктов (область не славится нефтяными компаниями, но тем не менее, выручку данный бизнес в области приносит)"
+      ],
+      "metadata": {
+        "id": "-NNtzyLGcvQu"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## 7. Вывод"
+      ],
+      "metadata": {
+        "id": "gdRi7u5F4L7z"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Проанализировав финансовую отчетность челябинских компаний, я обнаружил, что многие компании (почти половина) имеют нулевые значения в своей отчетности по выручке/прибыли/уплате процентов. Это говорит о том, что либо компании не слишком хорошо отчитываются, из-за чего появляются пробелы в данных, либо что многие компании имеют не устойчивое финансовое состояние, и либо будут скоро закрыты, либо уже неактивны.\n",
+        "\n",
+        "Две компании очень близки к банкротству - их закредитованность высока, а возможность тратить прибыль на покрытие долгов крайне сомнительна. В них точно лучше не идти работать.\n",
+        "\n",
+        "Компания, которая казалась мне переспективной для работы в ней и входит в топ-30 работадателей, действительно имеет неплохую отчетность относительно средних показателей по области. Но снижение выручки может сигнализировать о нестабильности и лучше будет посмотреть на отчетность этой компании в динамике.\n",
+        "\n",
+        "А самыми перспективными в области конечно, как и ожидалось, являются металлургические гиганты, поэтому все на завод!"
+      ],
+      "metadata": {
+        "id": "Is5GRx2w4PgN"
+      }
+    }
+  ]
+}
